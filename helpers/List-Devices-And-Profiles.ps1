@@ -13,6 +13,9 @@ $modelNames = @{
     # Stream Deck +
     "10GBD9901" = "Stream Deck+ (8 Keys + 4 Dials)"
     "20GBD9901" = "Stream Deck+ (8 Keys + 4 Dials)"
+    # Stream Deck + XL
+    "10GBX9901" = "Stream Deck+ XL (36 Keys + 6 Dials)"
+    "20GBX9901" = "Stream Deck+ XL (36 Keys + 6 Dials)"
     # Stream Deck Neo
     "10GBJ9901" = "Stream Deck Neo (8 Keys)"
     "20GBJ9901" = "Stream Deck Neo (8 Keys)"
