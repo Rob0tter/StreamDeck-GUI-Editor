@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Stream Deck Editor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── THEMES ── */
+:root[data-theme="dark"] {
+    --bg:        #0b0c10;
+    --bg2:       #13151b;
+    --bg3:       #1a1d26;
+    --border:    #252836;
+    --border2:   #333648;
+    --accent:    #e8c547;
+    --accent2:   #c4a832;
+    --text:      #d4d8e8;
+    --text-dim:  #5a6080;
+    --text-mid:  #8892b0;
+    --danger:    #e05c5c;
+    --success:   #4caf7d;
+    --editor-fg: #abb2bf;
+    --editor-bg: #0b0c10;
+}
+:root[data-theme="light"] {
+    --bg:        #f0f2f5;
+    --bg2:       #ffffff;
+    --bg3:       #e8eaed;
+    --border:    #d0d4dc;
+    --border2:   #b8bcc8;
+    --accent:    #2563eb;
+    --accent2:   #1d4ed8;
+    --text:      #1a1d26;
+    --text-dim:  #6b7280;
+    --text-mid:  #4b5563;
+    --danger:    #dc2626;
+    --success:   #16a34a;
+    --editor-fg: #1a1d26;
+    --editor-bg: #ffffff;
+}
+
+:root {
+    --font-mono: 'Cascadia Code','Fira Code','Consolas',monospace;
+    --font-ui:   'Trebuchet MS','Segoe UI',sans-serif;
+    --radius:    4px;
+    --toolbar-h: 48px;
+}
+
+html, body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font-ui); font-size:15px; overflow:hidden; user-select:none; transition: background 0.2s, color 0.2s; }
+
+.app { display:grid; grid-template-rows:var(--toolbar-h) 1fr; grid-template-columns:var(--sidebar-w,300px) 4px 1fr; grid-template-areas:"toolbar toolbar toolbar" "sidebar resizer editor"; height:100vh; }
+
+/* ── TOOLBAR ── */
+.toolbar { grid-area:toolbar; display:flex; align-items:center; gap:8px; padding:0 14px; background:var(--bg2); border-bottom:1px solid var(--border); }
+.toolbar-brand { font-size:13px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); margin-right:4px; white-space:nowrap; }
+.toolbar-sep { width:1px; height:22px; background:var(--border2); margin:0 4px; flex-shrink:0; }
+.toolbar-actions { margin-left:auto; display:flex; align-items:center; gap:6px; }
+
+.btn { display:flex; align-items:center; gap:5px; padding:6px 13px; border-radius:var(--radius); border:1px solid var(--border2); background:var(--bg3); color:var(--text-mid); font-family:var(--font-ui); font-size:13px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.btn:hover:not(:disabled) { border-color:var(--accent2); color:var(--text); background:var(--bg2); }
+.btn:disabled { opacity:0.35; cursor:default; }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+:root[data-theme="dark"] .btn.primary { color:#0b0c10; }
+.btn.primary:hover:not(:disabled) { background:var(--accent2); border-color:var(--accent2); }
+.btn.icon-btn { padding:6px 10px; }
+
+.status-badge { font-size:11px; font-family:var(--font-mono); padding:3px 9px; border-radius:2px; flex-shrink:0; }
+.status-badge.neutral { background:var(--bg3); color:var(--text-dim); border:1px solid var(--border); }
+.status-badge.err     { background:rgba(220,38,38,0.12); color:var(--danger); border:1px solid rgba(220,38,38,0.3); }
+@keyframes fadeout { to { opacity:0; } }
+.status-badge.saved   { background:rgba(22,163,74,0.12); color:var(--success); border:1px solid rgba(22,163,74,0.3); animation:fadeout 2s forwards 1.5s; }
+
+/* ── SIDEBAR ── */
+.sidebar { grid-area:sidebar; background:var(--bg2); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; min-width:180px; max-width:600px; }
+
+.sidebar-section { padding:12px 14px 10px; border-bottom:1px solid var(--border); }
+.sidebar-section-title { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
+
+.dd-stack { display:flex; flex-direction:column; gap:8px; }
+.dd-row   { display:flex; flex-direction:column; gap:3px; }
+.dd-label { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); }
+
+select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-family:var(--font-ui); font-size:13px; padding:5px 26px 5px 9px; border-radius:var(--radius); outline:none; cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 9px center; width:100%; transition:border-color 0.15s; }
+select:hover  { border-color:var(--accent2); }
+select:focus  { border-color:var(--accent); }
+select:disabled { opacity:0.4; cursor:default; }
+
+.info-row { display:flex; justify-content:space-between; align-items:baseline; padding:3px 0; font-size:11px; gap:8px; }
+.info-row .key   { color:var(--text-dim); white-space:nowrap; flex-shrink:0; }
+.info-row .value { color:var(--text); font-family:var(--font-mono); font-size:10px; word-break:break-all; text-align:right; }
+
+.sidebar-log { flex:1; overflow-y:auto; padding:8px 14px; }
+.log-entry { font-family:var(--font-mono); font-size:11px; line-height:1.7; padding-left:8px; margin-bottom:3px; border-left:2px solid var(--border); color:var(--text-dim); }
+.log-entry.info  { color:var(--text-mid); border-color:var(--border2); }
+.log-entry.ok    { color:var(--success);  border-color:var(--success); }
+.log-entry.error { color:var(--danger);   border-color:var(--danger); }
+.log-entry.warn  { color:var(--accent);   border-color:var(--accent); }
+
+/* ── RESIZER ── */
+.resizer { grid-area:resizer; width:4px; cursor:col-resize; background:var(--border); transition:background 0.15s; z-index:10; }
+.resizer:hover, .resizer.dragging { background:var(--accent); }
+
+/* ── EDITOR ── */
+.editor-area { grid-area:editor; display:flex; flex-direction:column; overflow:hidden; }
+.editor-tabs { display:flex; background:var(--bg2); border-bottom:1px solid var(--border); padding:0 16px; gap:2px; }
+.editor-tab { padding:10px 16px; font-size:13px; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; transition:color 0.15s,border-color 0.15s; }
+.editor-tab:hover  { color:var(--text-mid); }
+.editor-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.editor-pane { flex:1; display:none; overflow:hidden; }
+.editor-pane.active { display:flex; flex-direction:column; }
+.code-editor-wrap { flex:1; position:relative; overflow:hidden; }
+textarea#codeEditor { position:absolute; inset:0; width:100%; height:100%; background:var(--editor-bg); color:var(--editor-fg); font-family:var(--font-mono); font-size:14px; line-height:1.65; padding:20px; border:none; outline:none; resize:none; tab-size:2; white-space:pre; overflow:auto; user-select:text; transition:background 0.2s,color 0.2s; }
+textarea#codeEditor::selection { background:rgba(37,99,235,0.25); }
+:root[data-theme="dark"] textarea#codeEditor::selection { background:rgba(232,197,71,0.2); }
+.registry-view { flex:1; overflow:auto; padding:20px; font-family:var(--font-mono); font-size:12px; line-height:1.8; color:var(--text-mid); user-select:text; white-space:pre-wrap; word-break:break-all; }
+.empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--text-dim); }
+.empty-state .icon { font-size:48px; opacity:0.25; }
+.empty-state p { font-size:14px; letter-spacing:0.06em; }
+.img-pane { flex:1; overflow:hidden; position:relative; background:var(--bg); }
+#deviceImg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+/* ── CONTEXT MENU ── */
+.ctx-menu { position:fixed; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius); padding:4px 0; min-width:180px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
+.ctx-menu-item { padding:8px 16px; font-size:13px; cursor:pointer; color:var(--text); white-space:nowrap; }
+.ctx-menu-item:hover { background:var(--bg3); color:var(--accent); }
+.ctx-menu-sep { height:1px; background:var(--border); margin:4px 0; }
+
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- TOOLBAR -->
+  <header class="toolbar">
+    <span class="toolbar-brand" id="tb_brand">SD·Editor</span>
+    <div class="toolbar-sep"></div>
+    <div class="toolbar-actions">
+      <select id="selLang" onchange="onLangChange()" style="display:none;">
+        <option value="de">DE</option>
+        <option value="en">EN</option>
+      </select>
+      <span class="status-badge neutral" id="statusBadge"></span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title" id="lbl_selection"></div>
+      <div class="dd-stack">
+        <div class="dd-row">
+          <span class="dd-label" id="lbl_device"></span>
+          <select id="selDevice" onchange="onDeviceChange()">
+            <option value="" id="opt_select_device"></option>
+          </select>
+        </div>
+        <div class="dd-row">
+          <span class="dd-label" id="lbl_profile"></span>
+          <select id="selProfile" onchange="onProfileChange()" disabled>
+            <option value="" id="opt_select_profile"></option>
+          </select>
+        </div>
+        <div class="dd-row">
+          <span class="dd-label" id="lbl_page"></span>
+          <select id="selPage" onchange="onPageChange()" disabled>
+            <option value="" id="opt_select_page"></option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title" id="lbl_info"></div>
+      <div class="info-row"><span class="key" id="lbl_model"></span><span class="value" id="iModel">&mdash;</span></div>
+      <div class="info-row"><span class="key" id="lbl_profile_guid"></span><span class="value" id="iProfileGuid">&mdash;</span></div>
+      <div class="info-row"><span class="key" id="lbl_page_guid"></span><span class="value" id="iPageGuid">&mdash;</span></div>
+      <div class="info-row"><span class="key" id="lbl_file"></span><span class="value" id="iPath">&mdash;</span></div>
+      <div class="info-row"><span class="key" id="lbl_size"></span><span class="value" id="iSize">&mdash;</span></div>
+      <div class="info-row"><span class="key" id="lbl_default_page"></span><span class="value" id="iDefault">&mdash;</span></div>
+    </div>
+
+    <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;border-bottom:none;">
+      <div class="sidebar-section-title" id="lbl_log"></div>
+      <div class="sidebar-log" id="logPanel"></div>
+    </div>
+  </aside>
+
+  <!-- RESIZER -->
+  <div class="resizer" id="resizer"></div>
+
+  <!-- EDITOR -->
+  <main class="editor-area">
+    <div class="editor-tabs">
+      <div class="editor-tab active" id="tab-editor"   onclick="showTab('editor')" data-i18n="tab_manifest"></div>
+      <div class="editor-tab"        id="tab-registry" onclick="showTab('registry')" data-i18n="tab_registry"></div>
+    </div>
+    <div class="editor-pane active" id="pane-editor">
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="icon">&#x25a6;</div>
+        <p id="lbl_empty_state"></p>
+      </div>
+      <div class="img-pane" id="imgPane">
+        <img id="deviceImg" src="" alt="" />
+      </div>
+      <div class="code-editor-wrap" id="editorWrap" style="display:none;">
+        <textarea id="codeEditor" spellcheck="false"
+                  oninput="onEditorChange()"
+                  oncontextmenu="onContextMenu(event)"></textarea>
+      </div>
+    </div>
+    <div class="editor-pane" id="pane-registry">
+      <div class="registry-view" id="registryView"></div>
+    </div>
+  </main>
+
+</div>
+
+<!-- CONTEXT MENU -->
+<div class="ctx-menu" id="ctxMenu" style="display:none;">
+  <div class="ctx-menu-item" id="ctxOpenElement" onclick="ctxOpenElement()"></div>
+  <div class="ctx-menu-sep"></div>
+  <div class="ctx-menu-item" id="ctxCopy" onclick="document.execCommand('copy');hideCtxMenu()"></div>
+</div>
+
+<script>
+// ============================================================
+// MODELL-TABELLE
+// ============================================================
+const MODEL_NAMES = {
+    '10GAA9901':'Stream Deck (Original, 15 Keys)','20GAA9901':'Stream Deck (Original, 15 Keys)',
+    '10GBA9901':'Stream Deck MK.2 (15 Keys)',     '20GBA9901':'Stream Deck MK.2 (15 Keys)',
+    '10GAI9901':'Stream Deck Mini (6 Keys)',       '20GAI9901':'Stream Deck Mini (6 Keys)',
+    '10GAT9901':'Stream Deck XL (32 Keys)',        '20GAT9901':'Stream Deck XL (32 Keys)',
+    '10GBD9901':'Stream Deck+ (8 Keys + 4 Dials)','20GBD9901':'Stream Deck+ (8 Keys + 4 Dials)',
+    '10GBX9901':'Stream Deck+ XL (36 Keys + 6 Dials)','20GBX9901':'Stream Deck+ XL (36 Keys + 6 Dials)',
+    '10GBJ9901':'Stream Deck Neo (8 Keys)',        '20GBJ9901':'Stream Deck Neo (8 Keys)',
+    '20GBM9901':'Stream Deck Studio (32 Keys)',    'UI Stream Deck':'Virtual Stream Deck (Software)',
+};
+function modelName(m) { return MODEL_NAMES[m] || 'Unknown (' + m + ')'; }
+
+// ============================================================
+// I18N
+// ============================================================
+let T = {};  // aktuelles Sprach-Objekt
+
+function t(key, ...args) {
+    let s = T[key] || key;
+    args.forEach((a, i) => { s = s.replace('{' + i + '}', a); });
+    return s;
+}
+
+async function loadLang(lang) {
+    const data = await window.api.loadLang(lang);
+    if (data) T = data;
+    applyI18n();
+}
+
+function applyI18n() {
+    document.getElementById('statusBadge').textContent = t('status_ready');
+    // Labels
+    document.getElementById('lbl_selection').textContent   = t('label_selection');
+    document.getElementById('lbl_device').textContent      = t('label_device');
+    document.getElementById('lbl_profile').textContent     = t('label_profile');
+    document.getElementById('lbl_page').textContent        = t('label_page');
+    document.getElementById('lbl_info').textContent        = t('label_info');
+    document.getElementById('lbl_log').textContent         = t('label_log');
+    document.getElementById('lbl_model').textContent       = t('label_model');
+    document.getElementById('lbl_profile_guid').textContent= t('label_profile_guid');
+    document.getElementById('lbl_page_guid').textContent   = t('label_page_guid');
+    document.getElementById('lbl_file').textContent        = t('label_file');
+    document.getElementById('lbl_size').textContent        = t('label_size');
+    document.getElementById('lbl_default_page').textContent= t('label_default_page');
+    document.getElementById('lbl_empty_state').textContent = t('empty_state');
+    document.getElementById('registryView').textContent    = t('registry_not_loaded');
+    // Select placeholders
+    document.getElementById('opt_select_device').textContent  = t('select_device');
+    document.getElementById('opt_select_profile').textContent = t('select_profile');
+    document.getElementById('opt_select_page').textContent    = t('select_page');
+    // Tabs
+    document.getElementById('tab-editor').textContent   = t('tab_manifest');
+    document.getElementById('tab-registry').textContent = t('tab_registry');
+    // Context menu
+    document.getElementById('ctxOpenElement').textContent = t('ctx_open_element');
+    document.getElementById('ctxCopy').textContent        = t('ctx_copy');
+    // Theme button
+
+}
+
+async function onLangChange() {
+    const lang = document.getElementById('selLang').value;
+    await loadLang(lang);
+    await window.api.setConfig('UI', 'Language', lang);
+    await window.api.rebuildMenu(lang);
+}
+
+// ============================================================
+// THEME
+// ============================================================
+let currentTheme = 'dark';
+
+function applyTheme(theme) {
+    currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+
+}
+
+async function toggleTheme() {
+    const next = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    await window.api.setConfig('UI', 'Theme', next);
+}
+
+// ============================================================
+// RESIZER
+// ============================================================
+let isResizing = false;
+let resizeStartX = 0;
+let resizeStartW = 0;
+
+function initResizer() {
+    const resizer = document.getElementById('resizer');
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing  = true;
+        resizeStartX = e.clientX;
+        resizeStartW = document.getElementById('sidebar').offsetWidth;
+        resizer.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const newW = Math.max(180, Math.min(600, resizeStartW + e.clientX - resizeStartX));
+        document.getElementById('app').style.gridTemplateColumns = newW + 'px 4px 1fr';
+    });
+    document.addEventListener('mouseup', async () => {
+        if (!isResizing) return;
+        isResizing = false;
+        document.getElementById('resizer').classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        const w = document.getElementById('sidebar').offsetWidth;
+        await window.api.setConfig('UI', 'SidebarWidth', String(w));
+    });
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let allProfiles    = [];
+let deviceMap      = {};
+let currentFile    = null;
+let currentProfile = null;
+let isDirty        = false;
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', async () => {
+    // Config laden
+    const lang  = await window.api.getConfig('UI', 'Language', 'de');
+    const theme = await window.api.getConfig('UI', 'Theme', 'dark');
+    const sideW = await window.api.getConfig('UI', 'SidebarWidth', '300');
+
+    // Theme & Sprache anwenden
+    applyTheme(theme);
+    document.getElementById('selLang').value = lang;
+    await loadLang(lang);
+
+    // Sidebar-Breite
+    const w = parseInt(sideW) || 300;
+    document.getElementById('app').style.gridTemplateColumns = w + 'px 4px 1fr';
+
+    initResizer();
+
+    // Menue-Events vom Main-Prozess empfangen
+    window.api.onMenuEvent(async function(action, param) {
+        if      (action === 'save')        { saveFile(); }
+        else if (action === 'reload')      { loadData(); }
+        else if (action === 'restartSD')   { restartStreamDeck(); }
+        else if (action === 'toggleTheme') { toggleTheme(); }
+        else if (action === 'setLang')     {
+            document.getElementById('selLang').value = param;
+            await loadLang(param);
+            await window.api.setConfig('UI', 'Language', param);
+            await window.api.rebuildMenu(param);
+        }
+    });
+
+    log(t('log_started'), 'info');
+    showDeviceImg(null);
+    loadData();
+});
+
+document.addEventListener('click', () => hideCtxMenu());
+
+async function loadData() {
+    log(t('log_loading_profiles'), 'info');
+    setStatus('status_loading', 'neutral');
+    try {
+        allProfiles = await window.api.listProfiles();
+        buildDeviceMap();
+        populateDeviceSelect();
+        log(t('log_ready', allProfiles.length), 'ok');
+        setStatus('status_ready', 'neutral');
+    } catch(e) {
+        log(t('log_error', e.message), 'error');
+        setStatus('status_error', 'err');
+    }
+}
+
+// ============================================================
+// DEVICE MAP
+// ============================================================
+function buildDeviceMap() {
+    deviceMap = {};
+    for (const p of allProfiles) {
+        let mf;
+        try { mf = JSON.parse(p.manifestRaw); } catch { continue; }
+        const model  = mf?.Device?.Model || '';
+        const uuid   = mf?.Device?.UUID  || '';
+        const serial = uuid.replace(/.*\//, '').replace(/\].*/, '') || p.guid;
+        const name   = mf?.Name || '(kein Name)';
+        if (!deviceMap[serial]) deviceMap[serial] = { serial, model, profiles:[] };
+        deviceMap[serial].profiles.push({ guid:p.guid, name, manifestPath:p.manifestPath, manifestRaw:p.manifestRaw });
+    }
+}
+
+// ============================================================
+// DD1 – GERÄT
+// ============================================================
+function populateDeviceSelect() {
+    const sel  = document.getElementById('selDevice');
+    const prev = sel.value;
+    // Keep placeholder, rebuild rest
+    while (sel.options.length > 1) sel.remove(1);
+    for (const [serial, dev] of Object.entries(deviceMap)) {
+        const opt = document.createElement('option');
+        opt.value = serial;
+        opt.textContent = serial + '  \u2014  ' + modelName(dev.model);
+        sel.appendChild(opt);
+    }
+    if (prev && deviceMap[prev]) { sel.value = prev; onDeviceChange(); }
+}
+
+function onDeviceChange() {
+    const serial = document.getElementById('selDevice').value;
+    resetSelect('selProfile', t('select_profile'), true);
+    resetSelect('selPage',    t('select_page'),    true);
+    currentProfile = null;
+    clearInfo();
+    if (!serial) { showDeviceImg(null); return; }
+
+    const sel = document.getElementById('selProfile');
+    sel.disabled = false;
+    for (const p of deviceMap[serial].profiles) {
+        const opt = document.createElement('option');
+        opt.value = p.guid;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+    }
+    log(t('log_device', serial), 'info');
+    // Gerätebild anzeigen
+    const dev = deviceMap[serial];
+    showDeviceImg(dev ? dev.model : null);
+}
+
+// ============================================================
+// DD2 – PROFIL
+// ============================================================
+async function onProfileChange() {
+    const serial   = document.getElementById('selDevice').value;
+    const profGuid = document.getElementById('selProfile').value;
+    resetSelect('selPage', t('select_page_ready'), true);
+    currentProfile = null;
+    clearInfo();
+    if (!profGuid || !serial) {
+        const dev = serial ? deviceMap[serial] : null;
+        showDeviceImg(dev ? dev.model : null);
+        return;
+    }
+
+    const dev  = deviceMap[serial];
+    const prof = dev.profiles.find(p => p.guid === profGuid);
+    if (!prof) return;
+    currentProfile = prof;
+
+    openFile({ manifestPath:prof.manifestPath, manifestRaw:prof.manifestRaw, label:t('manifest_profile', prof.name) });
+
+    document.getElementById('iModel').textContent        = modelName(dev.model);
+    document.getElementById('iProfileGuid').textContent  = prof.guid;
+    document.getElementById('iPageGuid').textContent     = '\u2014';
+    document.getElementById('iDefault').textContent      = '\u2014';
+
+    log(t('log_loading_pages'), 'info');
+    let pages = [];
+    try { pages = await window.api.listPages(profGuid); log(t('log_pages', pages.length), 'ok'); }
+    catch(e) { log(t('log_pages_error', e.message), 'error'); }
+
+    const selPage = document.getElementById('selPage');
+    selPage.disabled = pages.length === 0;
+    selPage.innerHTML = '<option value="">' + t('select_page_ready') + '</option>';
+    for (const pg of pages) {
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify({ guid:pg.guid, path:pg.manifestPath, raw:pg.manifestRaw, isDefault:pg.isDefault, name:pg.name });
+        opt.textContent = pg.name + (pg.isDefault ? ' \u2605' : '');
+        selPage.appendChild(opt);
+    }
+}
+
+// ============================================================
+// DD3 – PAGE
+// ============================================================
+function onPageChange() {
+    const val = document.getElementById('selPage').value;
+    if (!val) {
+        if (currentProfile) {
+            openFile({ manifestPath:currentProfile.manifestPath, manifestRaw:currentProfile.manifestRaw, label:t('manifest_profile', currentProfile.name) });
+            document.getElementById('iPageGuid').textContent = '\u2014';
+            document.getElementById('iDefault').textContent  = '\u2014';
+            updatePathInfo(currentProfile.manifestPath, currentProfile.manifestRaw);
+        }
+        return;
+    }
+    const pg = JSON.parse(val);
+    openFile({ manifestPath:pg.path, manifestRaw:pg.raw, label:t('manifest_page', pg.name) });
+    document.getElementById('iPageGuid').textContent = pg.guid;
+    document.getElementById('iDefault').textContent  = pg.isDefault ? t('yes_default') : t('no');
+    updatePathInfo(pg.path, pg.raw);
+}
+
+// ============================================================
+// EDITOR
+// ============================================================
+function openFile(file) {
+    currentFile = file;
+    isDirty     = false;
+    document.getElementById('codeEditor').value         = formatJson(file.manifestRaw);
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('imgPane').style.display    = 'none';
+    document.getElementById('editorWrap').style.display = 'flex';
+    // btnSave removed
+    document.getElementById('tab-editor').textContent   = file.label;
+    updatePathInfo(file.manifestPath, file.manifestRaw);
+    showTab('editor');
+    log(t('log_opened', file.label), 'info');
+}
+
+function updatePathInfo(p, raw) {
+    document.getElementById('iPath').textContent = shortenPath(p);
+    document.getElementById('iSize').textContent = t('bytes', new Blob([raw]).size.toLocaleString('de'));
+}
+
+function onEditorChange() {
+    if (!isDirty) {
+        isDirty = true;
+        setStatus('status_unsaved', 'err');
+    }
+}
+
+async function saveFile() {
+    if (!currentFile) return;
+    const content = document.getElementById('codeEditor').value;
+    try { JSON.parse(content); }
+    catch(e) { log(t('log_json_error', e.message), 'error'); setStatus('status_json_error','err'); return; }
+    const result = await window.api.saveProfile(currentFile.manifestPath, content);
+    if (result.ok) {
+        isDirty = false;
+        currentFile.manifestRaw = content;
+        // btnSave removed
+        log(t('log_saved', currentFile.label), 'ok');
+        setStatus('status_saved', 'saved');
+        setTimeout(() => setStatus('status_ready', 'neutral'), 3000);
+    } else {
+        log(t('log_save_error', result.error), 'error');
+        setStatus('status_error', 'err');
+    }
+}
+
+// ============================================================
+// KONTEXT-MENÜ
+// ============================================================
+function onContextMenu(e) {
+    e.preventDefault();
+    const ta  = document.getElementById('codeEditor');
+    const sel = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+    const item = document.getElementById('ctxOpenElement');
+    item.style.opacity       = sel.length > 0 ? '1' : '0.4';
+    item.style.pointerEvents = sel.length > 0 ? 'auto' : 'none';
+    const menu = document.getElementById('ctxMenu');
+    menu.style.display = 'block';
+    const x = Math.min(e.clientX, window.innerWidth  - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 80);
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+}
+
+function hideCtxMenu() { document.getElementById('ctxMenu').style.display = 'none'; }
+
+async function ctxOpenElement() {
+    hideCtxMenu();
+    if (!currentProfile) { log(t('log_no_profile'), 'warn'); return; }
+    const ta  = document.getElementById('codeEditor');
+    const sel = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+    if (!sel) return;
+    log(t('log_open_element', sel), 'info');
+    try {
+        const result = await window.api.openElement(currentProfile.guid, sel);
+        if (!result.ok) { log(t('log_not_found', sel), 'error'); return; }
+        openFile({ manifestPath:result.manifestPath, manifestRaw:result.manifestRaw, label:t('manifest_element', sel.substring(0,12)) });
+        document.getElementById('iPageGuid').textContent = sel;
+        document.getElementById('iDefault').textContent  = '\u2014';
+        updatePathInfo(result.manifestPath, result.manifestRaw);
+    } catch(e) { log(t('log_error', e.message), 'error'); }
+}
+
+// ============================================================
+// STREAM DECK NEU STARTEN
+// ============================================================
+async function restartStreamDeck() {
+    const btn = document.getElementById('tb_restart');
+    btn.disabled = true;
+    btn.textContent = t('btn_restarting');
+    log(t('log_restarting'), 'warn');
+    setStatus('status_restarting', 'neutral');
+    try {
+        const result = await window.api.restartStreamDeck();
+        if (result.ok) { log(t('log_restarted'), 'ok'); setStatus('status_ready', 'neutral'); }
+        else { log(t('log_restart_error', result.error || '?'), 'error'); setStatus('status_error','err'); }
+    } catch(e) { log(t('log_error', e.message), 'error'); setStatus('status_error','err'); }
+    btn.disabled = false;
+    btn.textContent = t('btn_restart_sd');
+}
+
+// ============================================================
+// TABS
+// ============================================================
+async function showTab(name) {
+    document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.editor-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-'  + name).classList.add('active');
+    document.getElementById('pane-' + name).classList.add('active');
+    if (name === 'registry') await loadRegistry();
+}
+
+async function loadRegistry() {
+    const view = document.getElementById('registryView');
+    view.textContent = '...';
+    try {
+        const r = await window.api.readRegistry();
+        if (!r.supported) { view.textContent = t('registry_windows_only'); return; }
+        const hex = r.hex, bytes = [];
+        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i,2),16));
+        let dump = '';
+        for (let i = 0; i < bytes.length; i += 16) {
+            const chunk = bytes.slice(i,i+16);
+            dump += i.toString(16).padStart(6,'0') + '  ' +
+                    chunk.map(b => b.toString(16).padStart(2,'0')).join(' ').padEnd(47,' ') +
+                    '  |' + chunk.map(b => (b>=0x20&&b<0x7F)?String.fromCharCode(b):'.').join('') + '|\n';
+        }
+        view.textContent = dump;
+        log(t('log_registry', bytes.length), 'ok');
+    } catch(e) { view.textContent = 'Error: ' + e.message; }
+}
+
+// ============================================================
+// HILFSFUNKTIONEN
+// ============================================================
+function resetSelect(id, placeholder, disable) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">' + placeholder + '</option>';
+    sel.disabled  = disable;
+}
+
+function showEmpty() {
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('imgPane').style.display    = 'none';
+    document.getElementById('editorWrap').style.display = 'none';
+    document.getElementById('tab-editor').textContent   = t('tab_manifest');
+    isDirty = false; currentFile = null;
+}
+
+async function showDeviceImg(model) {
+    // Dateiname: Modellnummer + .jpg, Fallback default.jpg
+    const filename = model ? (model + '.jpg') : 'default.jpg';
+    const result = await window.api.loadImg(filename);
+    const imgEl  = document.getElementById('deviceImg');
+    if (result.ok) imgEl.src = result.data;
+    else imgEl.src = '';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('imgPane').style.display    = 'flex';
+    document.getElementById('editorWrap').style.display = 'none';
+    isDirty = false; currentFile = null;
+}
+
+function hideDeviceImg() {
+    document.getElementById('imgPane').style.display = 'none';
+}
+
+function clearInfo() {
+    ['iModel','iProfileGuid','iPageGuid','iPath','iSize','iDefault']
+        .forEach(id => document.getElementById(id).textContent = '\u2014');
+}
+
+function formatJson(raw) {
+    try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; }
+}
+
+function shortenPath(p) {
+    if (!p) return '\u2014';
+    const parts = p.replace(/\\/g, '/').split('/');
+    return parts.length > 3 ? '\u2026/' + parts.slice(-3).join('/') : p;
+}
+
+function setStatus(key, cls) {
+    const el = document.getElementById('statusBadge');
+    el.textContent = t(key);
+    el.className   = 'status-badge ' + cls;
+}
+
+function log(msg, level='info') {
+    const panel = document.getElementById('logPanel');
+    const ts    = new Date().toLocaleTimeString('de-DE',{hour12:false});
+    const el    = document.createElement('div');
+    el.className   = 'log-entry ' + level;
+    el.textContent = ts + '  ' + msg;
+    panel.appendChild(el);
+    panel.scrollTop = panel.scrollHeight;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "streamdeck-editor",
+  "version": "0.1.0",
+  "description": "Stream Deck Profile Editor",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}
